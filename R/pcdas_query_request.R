@@ -9,21 +9,26 @@
 #'
 #' @return A list
 #'
-pcdas_query_request <- function(body, pcdas_token = NULL, throttle_rate = 1, max_tries = 10){
+pcdas_query_request <- function(
+  body,
+  pcdas_token = NULL,
+  throttle_rate = 1,
+  max_tries = 10
+) {
   # Function argument check
   checkmate::assert_string(x = body)
   checkmate::assert_numeric(x = throttle_rate, lower = 0)
   checkmate::assert_numeric(x = max_tries, lower = 0)
 
   # Try to get PCDaS API token from renviron if not provided
-  if(is.null(pcdas_token)){
+  if (is.null(pcdas_token)) {
     pcdas_token <- get_pcdas_token_renviron()
   }
 
   # Paginated request
   more <- TRUE
   content <- list()
-  while(more == TRUE){
+  while (more == TRUE) {
     # Create request
     req <- httr2::request(base_url = pcdas_url) %>%
       httr2::req_url_path_append("sql_query") %>%
@@ -36,20 +41,28 @@ pcdas_query_request <- function(body, pcdas_token = NULL, throttle_rate = 1, max
 
     # Get content
     tmp_content <- httr2::resp_body_json(resp)
-    if(length(tmp_content$rows) > 0){
+    if (length(tmp_content$rows) > 0) {
       content <- append(content, list(tmp_content))
     }
 
     # If cursor is present and row length bigger than 0, go for next page
-    if(!is.null(content[[length(content)]]$cursor) & length(tmp_content$rows) > 0){
-      more <- TRUE
-      body <- jsonlite::toJSON(
-        list(
-          token = list(token = pcdas_token),
-          sql = list(sql = list(cursor = content[[length(content)]]$cursor))
-        ), auto_unbox = TRUE
-      )
-      # If not, stops while statement
+    if (length(tmp_content$rows) > 0) {
+      if (
+        !is.null(content[[length(content)]]$cursor) &
+          length(tmp_content$rows) > 0
+      ) {
+        more <- TRUE
+        body <- jsonlite::toJSON(
+          list(
+            token = list(token = pcdas_token),
+            sql = list(sql = list(cursor = content[[length(content)]]$cursor))
+          ),
+          auto_unbox = TRUE
+        )
+        # If not, stops while statement
+      } else {
+        more <- FALSE
+      }
     } else {
       more <- FALSE
     }
@@ -57,12 +70,3 @@ pcdas_query_request <- function(body, pcdas_token = NULL, throttle_rate = 1, max
 
   return(content)
 }
-
-
-
-
-
-
-
-
-
