@@ -19,79 +19,125 @@
 #'
 #' @importFrom rlang .data
 #' @export
-get_sinasc <- function(agg, agg_time = "year", ano, pcdas_token = NULL, sexo = NULL, more_filters = NULL, fetch_size = 65000){
+get_sinasc <- function(
+  agg,
+  agg_time = "year",
+  ano,
+  pcdas_token = NULL,
+  sexo = NULL,
+  more_filters = NULL,
+  fetch_size = 65000
+) {
   # Function argument check
-  checkmate::assert_choice(x = agg, choices = c("uf_res", "uf_ocor", "mun_res", "mun_ocor", "regsaude_res", "regsaude_ocor", "regsaude_449_res", "regsaude_449_ocor"))
+  checkmate::assert_choice(
+    x = agg,
+    choices = c(
+      "uf_res",
+      "uf_ocor",
+      "mun_res",
+      "mun_ocor",
+      "regsaude_res",
+      "regsaude_ocor",
+      "regsaude_449_res",
+      "regsaude_449_ocor"
+    )
+  )
   checkmate::assert_choice(x = agg_time, choices = c("year", "month", "week"))
   checkmate::assert_vector(x = ano)
   checkmate::assert_string(x = pcdas_token, null.ok = TRUE)
-  checkmate::assert_choice(x = sexo, choices = c("Masculino", "Feminino", "Ignorado"), null.ok = TRUE)
+  checkmate::assert_choice(
+    x = sexo,
+    choices = c("Masculino", "Feminino", "Ignorado"),
+    null.ok = TRUE
+  )
   checkmate::assert_string(x = more_filters, null.ok = TRUE)
   checkmate::assert_number(x = fetch_size, lower = 1)
 
   # Try to get PCDaS API token from renviron if not provided
-  if(is.null(pcdas_token)){
+  if (is.null(pcdas_token)) {
     pcdas_token <- get_pcdas_token_renviron()
   }
 
   # Check if token have access to index
-  if(!("datasus-sinasc" %in% list_pcdas_tables())){
-    stop("Your token does not have access to 'datasus-sinasc' index. Please ask PCDaS to grant your access to this index.")
+  if (!("datasus-sinasc" %in% list_pcdas_tables())) {
+    stop(
+      "Your token does not have access to 'datasus-sinasc' index. Please ask PCDaS to grant your access to this index."
+    )
   }
 
   # Variable aggregation name
-  if(agg == "uf_res"){
+  if (agg == "uf_res") {
     agg_geo <- "res_CODIGO_UF"
-  } else if (agg == "uf_ocor"){
+  } else if (agg == "uf_ocor") {
     agg_geo <- "nasc_CODIGO_UF"
-  } else if (agg == "mun_res"){
+  } else if (agg == "mun_res") {
     agg_geo <- "res_codigo_adotado"
-  } else if (agg == "mun_ocor"){
+  } else if (agg == "mun_ocor") {
     agg_geo <- "nasc_codigo_adotado"
-  } else if (agg == "regsaude_res"){
+  } else if (agg == "regsaude_res") {
     agg_geo <- "res_RSAUDCOD"
-  } else if (agg == "regsaude_ocor"){
+  } else if (agg == "regsaude_ocor") {
     agg_geo <- "nasc_RSAUDCOD"
-  } else if (agg == "regsaude_449_res"){
+  } else if (agg == "regsaude_449_res") {
     agg_geo <- "res_codigo_adotado"
-  } else if (agg == "regsaude_449_ocor"){
+  } else if (agg == "regsaude_449_ocor") {
     agg_geo <- "nasc_codigo_adotado"
   }
 
   # SQL query basic partials
   sql_select <- glue::glue("SELECT {agg_geo} AS agg, COUNT(1) AS freq")
   sql_from <- glue::glue("FROM \"datasus-sinasc\"")
-  sql_where <- glue::glue("WHERE ano_nasc IN ({glue::glue_collapse(ano, sep = ', ')}) AND data_nasc IS NOT NULL")
+  sql_where <- glue::glue(
+    "WHERE ano_nasc IN ({glue::glue_collapse(ano, sep = ', ')})"
+  )
   sql_group_by <- glue::glue("GROUP BY {agg_geo}")
 
   # Time aggregation additions
-  if(agg_time == "year"){
-    sql_select <- glue::glue(sql_select, ", DATETIME_FORMAT(data_nasc, \'yyyy\') AS agg_time")
+  if (agg_time == "year") {
+    sql_select <- glue::glue(
+      sql_select,
+      ", DATETIME_FORMAT(data_nasc, \'yyyy\') AS agg_time"
+    )
     sql_group_by <- glue::glue(sql_group_by, ", agg_time")
-  } else if(agg_time == "month"){
-    sql_select <- glue::glue(sql_select, ", DATETIME_FORMAT(data_nasc, \'yyyy-MM\') AS agg_time")
+  } else if (agg_time == "month") {
+    sql_select <- glue::glue(
+      sql_select,
+      ", DATETIME_FORMAT(data_nasc, \'yyyy-MM\') AS agg_time"
+    )
     sql_group_by <- glue::glue(sql_group_by, ", agg_time")
-  } else if(agg_time == "week"){
-    sql_select <- glue::glue(sql_select, ", DATETIME_FORMAT(data_nasc, \'yyyy-ww\') AS agg_time")
+  } else if (agg_time == "week") {
+    sql_select <- glue::glue(
+      sql_select,
+      ", DATETIME_FORMAT(data_nasc, \'yyyy-ww\') AS agg_time"
+    )
     sql_group_by <- glue::glue(sql_group_by, ", agg_time")
   }
 
   # Additions to where partial
   # Sexo
-  if(!is.null(sexo)){
+  if (!is.null(sexo)) {
     sql_where <- glue::glue(sql_where, "AND def_sexo = '{sexo}'", .sep = " ")
   }
 
   # More filters
-  if(!is.null(more_filters)){
+  if (!is.null(more_filters)) {
     sql_where <- glue::glue(sql_where, "AND {more_filters}", .sep = " ")
   }
 
   # Create SQL query string
-  sql_query <- glue::glue(sql_select, sql_from, sql_where, sql_group_by, .sep = " ")
+  sql_query <- glue::glue(
+    sql_select,
+    sql_from,
+    sql_where,
+    sql_group_by,
+    .sep = " "
+  )
 
   # Create list with token and SQL query
-  request_body <- list(token = list(token = pcdas_token), sql = list(sql = list(query = sql_query, fetch_size = fetch_size)))
+  request_body <- list(
+    token = list(token = pcdas_token),
+    sql = list(sql = list(query = sql_query, fetch_size = fetch_size))
+  )
 
   # Request body as JSON
   request_body_json <- jsonlite::toJSON(request_body, auto_unbox = TRUE)
@@ -100,17 +146,29 @@ get_sinasc <- function(agg, agg_time = "year", ano, pcdas_token = NULL, sexo = N
   content <- pcdas_query_request(body = request_body_json)
 
   # Transform content to data.frame and tibble
-  content_df <- convert_list_content_to_df(content) %>%
-    tibble::as_tibble() %>%
-    dplyr::mutate(
-      agg = as.numeric(.data$agg),
-      freq = as.numeric(.data$freq)
-    ) %>%
-    dplyr::select("agg", "agg_time", "freq")
+  if (length(content) == 0) {
+    content_df = tibble::tibble(
+      agg = as.numeric(),
+      agg_time = as.character(),
+      freq = as.numeric()
+    )
+  } else {
+    content_df <- convert_list_content_to_df(content) %>%
+      tibble::as_tibble() %>%
+      dplyr::mutate(
+        agg = as.numeric(.data$agg),
+        freq = as.numeric(.data$freq)
+      ) %>%
+      dplyr::select("agg", "agg_time", "freq")
+  }
 
   # If regsaude_449, aggregate municipalities result to reg_saude
-  if(agg == "regsaude_449_res" | agg == "regsaude_449_ocor"){
-    content_df <- dplyr::left_join(content_df, rpcdas::mun_reg_saude_449, by = c("agg" = "cod_mun")) %>%
+  if (agg == "regsaude_449_res" | agg == "regsaude_449_ocor") {
+    content_df <- dplyr::left_join(
+      content_df,
+      rpcdas::mun_reg_saude_449,
+      by = c("agg" = "cod_mun")
+    ) %>%
       dplyr::group_by(agg = .data$cod_reg_saude, .data$agg_time) %>%
       dplyr::summarise(freq = sum(.data$freq, na.rm = TRUE)) %>%
       dplyr::ungroup()
